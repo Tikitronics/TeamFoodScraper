@@ -37,8 +37,19 @@ namespace TeamFoodCrawler
             string additionalInfo;
 
             // Hole Webinhalt
-            HtmlWeb web = new HtmlWeb();
-            var htmlDoc = web.Load(baseUrl);
+            HtmlDocument htmlDoc;
+            string webPageContent;
+
+            using (var client = new WebClient())
+            {
+                IWebProxy defaultWebProxy = WebRequest.DefaultWebProxy;
+                defaultWebProxy.Credentials = CredentialCache.DefaultCredentials;
+                client.Proxy = defaultWebProxy;
+                webPageContent = client.DownloadString(baseUrl);
+            }
+
+            htmlDoc = new HtmlAgilityPack.HtmlDocument();
+            htmlDoc.LoadHtml(webPageContent);
 
             // Hole relevante Informationen aus Webinhalt
             var contentNode = htmlDoc.GetElementbyId("col3_content");
@@ -160,7 +171,8 @@ namespace TeamFoodCrawler
 
                     // Preis
                     string priceString = tds[3].InnerText.TrimEnd('€');
-                    decimal price = decimal.Parse(priceString, style, provider);
+                    decimal price = 0;
+                    decimal.TryParse(priceString, style, provider, out price);
                     newMenuItem.Price = price;
 
                     // Beilage
@@ -169,8 +181,18 @@ namespace TeamFoodCrawler
 
                     // Zusatzstoffe
                     string additives = tds[5].InnerText;
-                    int[] additivesArray = Array.ConvertAll(additives.Split(','), int.Parse);
-                    newMenuItem.Additives = additivesArray.ToList();
+                    if (additives.Contains(","))
+                    {
+                        int[] additivesArray = Array.ConvertAll(additives.Split(','), int.Parse);
+                        newMenuItem.Additives = additivesArray.ToList();
+                    }
+                    else
+                    {
+                        newMenuItem.Additives = new List<int>();
+                        int add;
+                        if(int.TryParse(additives, out add)) newMenuItem.Additives.Add(add);
+                    }
+
 
                     newMenu.AddMenuItem(currentDay, newMenuItem);
                 }
