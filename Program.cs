@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Net;
 using HtmlAgilityPack;
@@ -14,28 +14,30 @@ namespace TeamFoodCrawler
     {
         static string fileName = "TeamFood Speiseplan.txt";
         static string baseUrl = @"http://www.teamfood.eu/index.php?target=tf/speisekarte_dyn";
-        static string path;
 
         static void Main(string[] args)
-        {
-            string currentPath;
-
-            Console.OutputEncoding = Encoding.Default;
-            
-            currentPath = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-            path = Path.Combine(currentPath, fileName);
-            File.Delete(path);
-
-            GetAgileMenu();
-
-            Console.ReadLine();
-        }
-
-        static void GetAgileMenu()
         {
             List<TeamFoodMenu> menu;
             string additionalInfo;
 
+            // Hole Content-Node und extrahiere Inhalte
+            var contentNode = GetContentNode();
+            menu = GetMenuFromContent(contentNode);
+            additionalInfo = GetAdditionalInfoFromContent(contentNode);
+
+            // Schreibe in Datei
+            saveMenuToFile(menu);
+
+            // Schreibe in Konsole
+            //printMenuToConsole(menu, additionalInfo);
+        }
+
+        /// <summary>
+        /// Hole Inhalt der TeamFood Webseite mittels HtmlAgilityPack
+        /// </summary>
+        /// <returns>Relevanter Content-Knoten</returns>
+        static HtmlNode GetContentNode()
+        {
             // Hole Webinhalt
             HtmlDocument htmlDoc;
             string webPageContent;
@@ -54,26 +56,14 @@ namespace TeamFoodCrawler
             // Hole relevante Informationen aus Webinhalt
             var contentNode = htmlDoc.GetElementbyId("col3_content");
 
-            additionalInfo = GetAdditionalInfoFromContent(contentNode);
-            menu = GetMenuFromContent(contentNode);
-
-            foreach( var m in menu)
-            {
-                Console.WriteLine(m.ToString());
-                File.AppendAllText(path, m.ToString());
-            }
-
-            StringBuilder sb = new StringBuilder();
-
-            sb.AppendFormat("Zusätze:\n{0}\n{1}", new String('=', 8), additionalInfo);
-
-            Console.WriteLine(sb.ToString());
-            File.AppendAllText(path, sb.ToString());
+            return contentNode;
         }
 
-        // *****************************************
-        // Hole Zusatzinformationen aus HTML Knoten
-        // *****************************************
+        /// <summary>
+        /// Hole Zusatzinformationen aus HTML Knoten 
+        /// </summary>
+        /// <param name="contentNode"></param>
+        /// <returns></returns>
         static string GetAdditionalInfoFromContent(HtmlNode contentNode)
         {
             var infos = contentNode.SelectNodes("p");
@@ -87,9 +77,11 @@ namespace TeamFoodCrawler
             return additionalInfo;
         }
 
-        // *****************************************
-        // Hole Menü aus HTML Knoten
-        // *****************************************
+        /// <summary>
+        /// Hole Menü aus HTML Knoten
+        /// </summary>
+        /// <param name="contentNode"></param>
+        /// <returns></returns>
         static List<TeamFoodMenu> GetMenuFromContent(HtmlNode contentNode)
         {
             List<TeamFoodMenu> menu = new List<TeamFoodMenu>();
@@ -124,7 +116,11 @@ namespace TeamFoodCrawler
 
                 // Start- und Enddatum
                 var dates = datePattern.Matches(headers[i].InnerText);
-                if (dates.Count != 2) throw new Exception("Fehler beim Parsen von Anfangs- und Enddatum");
+                if (dates.Count != 2)
+                {
+                    continue;
+                    //throw new Exception("Fehler beim Parsen von Anfangs- und Enddatum");
+                }
                 start = DateTime.Parse(dates[0].Value);
                 end = DateTime.Parse(dates[1].Value);
 
@@ -177,8 +173,8 @@ namespace TeamFoodCrawler
 
                     // Beilage
                     string side = WebUtility.HtmlDecode(tds[4].InnerText);
-                    newMenuItem.SideDish = side;
-
+                    if (side != "-") { newMenuItem.SideDish = side; }
+                    
                     // Zusatzstoffe
                     string additives = tds[5].InnerText;
                     if (additives.Contains(","))
@@ -203,8 +199,56 @@ namespace TeamFoodCrawler
             return menu;
         }
 
+        /// <summary>
+        /// Schreibt die extrahierten Informationen in die Konsole
+        /// </summary>
+        /// <param name="menuList"></param>
+        /// <param name="additions"></param>
+        static void printMenuToConsole(List<TeamFoodMenu> menu, string additions)
+        {
+            Console.OutputEncoding = Encoding.Default;
+
+            // Schreibe Menüinhalte 
+            foreach (var m in menu)
+            {
+                Console.WriteLine(m.ToString());
+            }
+
+            // Schreibe Liste der Zusätze
+            StringBuilder sb = new StringBuilder();
+            sb.AppendFormat("Zusätze:\n{0}\n{1}", new String('=', 8), additions);
+            Console.WriteLine(sb.ToString());
+
+            Console.ReadLine();
+        }
+
+        /// <summary>
+        /// Schreibe die extrahierten Inhalte in eine Datei
+        /// </summary>
+        /// <param name="menu"></param>
+        static void saveMenuToFile(List<TeamFoodMenu> menu)
+        {
+            // Bestimme Pfad und lösche evtl. vorhanden Datei
+            string currentPath = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+            string path = Path.Combine(currentPath, fileName);
+            File.Delete(path);
+
+            File.WriteAllText(path, "teamfood\r\n");
+
+            foreach (var m in menu)
+            {
+                foreach (var d in m.Days)
+                {
+                    File.AppendAllText(path, d.Wochentag.ToString() + "\n");
+
+                    foreach(var mi in d.MenuItems)
+                    {
+                        StringBuilder sb = new StringBuilder();
+                        sb.AppendFormat("{0};;{1};{2};{3}\n", mi.Description, mi.SideDish, mi.Type, mi.Price);
+                        File.AppendAllText(path, sb.ToString());
+                    }                   
+                }
+            }
+        }
     }
-
-
-    
 }
